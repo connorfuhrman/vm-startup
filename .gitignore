@@ -1,1 +1,11 @@
+# Nix build outputs
 result
+result-*
+out
+
+# Nix tooling
+.direnv/
+.direnv
+
+# Docker image tarballs produced locally
+*.tar.gz
