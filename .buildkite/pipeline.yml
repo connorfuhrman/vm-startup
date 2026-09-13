@@ -9,7 +9,7 @@
 #   IMAGE_REGISTRY_USER, IMAGE_REGISTRY_PASSWORD — optional docker login
 
 steps:
-  - label: ":nix: Flake check & nixfmt"
+  - label: ":nix: Flake check"
     key: flake-check
     command: |
       set -euo pipefail
@@ -42,6 +42,8 @@ steps:
         command: |
           set -euo pipefail
           chmod +x .buildkite/scripts/*.sh
+          mkdir -p images
+          buildkite-agent artifact download "images/determinate-nix-x86_64-linux.tar.gz" .
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
             bash .buildkite/scripts/smoke-test.sh x86_64-linux "images/determinate-nix-x86_64-linux.tar.gz"
           elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
@@ -74,6 +76,8 @@ steps:
         command: |
           set -euo pipefail
           chmod +x .buildkite/scripts/*.sh
+          mkdir -p images
+          buildkite-agent artifact download "images/determinate-nix-aarch64-linux.tar.gz" .
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
             bash .buildkite/scripts/smoke-test.sh aarch64-linux "images/determinate-nix-aarch64-linux.tar.gz"
           elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
