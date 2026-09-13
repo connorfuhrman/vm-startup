@@ -25,9 +25,14 @@ run_in_container() {
   local runtime="$1"
   local image_ref="$2"
   shift 2
-  "${runtime}" run --rm --privileged --network=bridge \
+
+  # Nix inside containers typically needs elevated privileges and a writable /tmp.
+  "${runtime}" run --rm \
+    --privileged \
+    --network=bridge \
     -e NIX_CONFIG="experimental-features = nix-command flakes" \
-    "${image_ref}" bash -euo pipefail -c "$*"
+    "${image_ref}" \
+    bash -euo pipefail -c "$*"
 }
 
 if [[ ! -f "${IMAGE_TAR}" ]]; then
@@ -37,15 +42,35 @@ fi
 
 RUNTIME="$(detect_container_runtime)"
 IMAGE_TAG="determinate-nix-smoke:${SYSTEM}"
+
+echo "Loading ${IMAGE_TAR} with ${RUNTIME}..."
 LOAD_OUTPUT="$("${RUNTIME}" load -i "${IMAGE_TAR}")"
 echo "${LOAD_OUTPUT}"
+
+# docker/podman load prints: Loaded image: <name>:<tag>
 LOADED_REF="$(echo "${LOAD_OUTPUT}" | awk '/Loaded image:/ { print $3; exit }')"
 if [[ -z "${LOADED_REF}" ]]; then
   echo "error: could not parse loaded image reference from ${RUNTIME} load output" >&2
   exit 1
 fi
+
 "${RUNTIME}" tag "${LOADED_REF}" "${IMAGE_TAG}"
+echo "Tagged loaded image as ${IMAGE_TAG}"
+
+echo "Checking nix --version..."
 run_in_container "${RUNTIME}" "${IMAGE_TAG}" 'nix --version'
-run_in_container "${RUNTIME}" "${IMAGE_TAG}" 'command -v determinate-nixd >/dev/null'
+
+echo "Checking determinate-nixd..."
+run_in_container "${RUNTIME}" "${IMAGE_TAG}" '
+  if command -v determinate-nixd >/dev/null 2>&1; then
+    determinate-nixd --help >/dev/null 2>&1 || determinate-nixd --version || true
+  else
+    echo "error: determinate-nixd not found in PATH" >&2
+    exit 1
+  fi
+'
+
+echo "Checking nix run nixpkgs#hello..."
 run_in_container "${RUNTIME}" "${IMAGE_TAG}" 'nix run nixpkgs#hello'
+
 echo "Smoke tests passed for ${SYSTEM}"
