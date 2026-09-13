@@ -24,6 +24,7 @@ find_container_tarball() {
     exit 1
   fi
 
+  # dockerTools image derivations usually expose a single tarball at the output root.
   if [[ -f "${result_link}" ]]; then
     echo "${result_link}"
     return 0
@@ -39,6 +40,7 @@ find_container_tarball() {
     fi
   done
 
+  # Fall back to any tarball under the derivation output.
   candidate="$(find -L "${result_link}" -maxdepth 2 -type f \( -name '*.tar' -o -name '*.tar.gz' -o -name '*.tgz' \) | head -n 1 || true)"
   if [[ -n "${candidate}" ]]; then
     echo "${candidate}"
@@ -46,6 +48,8 @@ find_container_tarball() {
   fi
 
   echo "error: could not locate container tarball under ${result_link}" >&2
+  echo "Contents:" >&2
+  find -L "${result_link}" -maxdepth 3 -type f >&2 || true
   exit 1
 }
 
@@ -66,9 +70,13 @@ else
 fi
 
 TARBALL_SRC="$(find_container_tarball "${OUT_LINK}")"
+TARBALL_SRC="$(readlink -f "${TARBALL_SRC}")"
 mkdir -p "${ARTIFACT_DIR}"
 
-if [[ "${TARBALL_SRC}" == *.tar.gz || "${TARBALL_SRC}" == *.tgz ]]; then
+# Out-links are often named "result-container" even when they point at a gzip
+# stream. Detect gzip by magic bytes so we never wrap an already-gzipped image.
+if [[ "${TARBALL_SRC}" == *.tar.gz || "${TARBALL_SRC}" == *.tgz ]] \
+  || [[ "$(od -An -tx1 -N2 "${TARBALL_SRC}" | tr -d ' \n')" == "1f8b" ]]; then
   cp -f "${TARBALL_SRC}" "${ARTIFACT_PATH}"
 else
   gzip -c "${TARBALL_SRC}" > "${ARTIFACT_PATH}"
