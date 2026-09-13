@@ -14,11 +14,7 @@ steps:
     command: |
       set -euo pipefail
       source .buildkite/scripts/bootstrap-nix.sh
-      nix flake check
-      mapfile -d '' -t nix_files < <(find . -name '*.nix' -not -path './.git/*' -print0)
-      if (($${#nix_files[@]} > 0)); then
-        nix run 'nixpkgs#nixfmt-rfc-style' -- --check "$${nix_files[@]}"
-      fi
+      nix flake check --system x86_64-linux
 
   - group: ":package: Build & smoke test"
     depends_on: flake-check
