@@ -16,8 +16,8 @@ steps:
       source .buildkite/scripts/bootstrap-nix.sh
       nix flake check
       mapfile -d '' -t nix_files < <(find . -name '*.nix' -not -path './.git/*' -print0)
-      if ((${#nix_files[@]} > 0)); then
-        nix run 'nixpkgs#nixfmt-rfc-style' -- --check "${nix_files[@]}"
+      if (($${#nix_files[@]} > 0)); then
+        nix run 'nixpkgs#nixfmt-rfc-style' -- --check "$${nix_files[@]}"
       fi
 
   - group: ":package: Build & smoke test"
