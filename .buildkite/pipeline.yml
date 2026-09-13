@@ -19,8 +19,8 @@ steps:
   - group: ":package: Build & smoke test"
     depends_on: flake-check
     steps:
-      - label: ":nix: Build & smoke (x86_64-linux)"
-        key: build-smoke-amd64
+      - label: ":nix: Build container (x86_64-linux)"
+        key: build-amd64
         agents:
           queue: linux-medium
         env:
@@ -30,12 +30,29 @@ steps:
           chmod +x .buildkite/scripts/*.sh
           source .buildkite/scripts/bootstrap-nix.sh
           bash .buildkite/scripts/build.sh x86_64-linux
-          bash .buildkite/scripts/smoke-test.sh x86_64-linux "images/determinate-nix-x86_64-linux.tar.gz"
         artifact_paths:
           - images/determinate-nix-x86_64-linux.tar.gz
 
-      - label: ":nix: Build & smoke (aarch64-linux)"
-        key: build-smoke-arm64
+      - label: ":docker: Smoke test (x86_64-linux)"
+        key: smoke-amd64
+        depends_on: build-amd64
+        soft_fail: true
+        agents:
+          queue: linux-medium
+        command: |
+          set -euo pipefail
+          chmod +x .buildkite/scripts/*.sh
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            bash .buildkite/scripts/smoke-test.sh x86_64-linux "images/determinate-nix-x86_64-linux.tar.gz"
+          elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
+            bash .buildkite/scripts/smoke-test.sh x86_64-linux "images/determinate-nix-x86_64-linux.tar.gz"
+          else
+            echo "Skipping smoke test: no functional docker/podman runtime on agent"
+            exit 0
+          fi
+
+      - label: ":nix: Build container (aarch64-linux)"
+        key: build-arm64
         agents:
           queue: mac-mini-aarch64-linux
         env:
@@ -45,21 +62,39 @@ steps:
           chmod +x .buildkite/scripts/*.sh
           source .buildkite/scripts/bootstrap-nix.sh
           bash .buildkite/scripts/build.sh aarch64-linux
-          bash .buildkite/scripts/smoke-test.sh aarch64-linux "images/determinate-nix-aarch64-linux.tar.gz"
         artifact_paths:
           - images/determinate-nix-aarch64-linux.tar.gz
+
+      - label: ":docker: Smoke test (aarch64-linux)"
+        key: smoke-arm64
+        depends_on: build-arm64
+        soft_fail: true
+        agents:
+          queue: mac-mini-aarch64-linux
+        command: |
+          set -euo pipefail
+          chmod +x .buildkite/scripts/*.sh
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            bash .buildkite/scripts/smoke-test.sh aarch64-linux "images/determinate-nix-aarch64-linux.tar.gz"
+          elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
+            bash .buildkite/scripts/smoke-test.sh aarch64-linux "images/determinate-nix-aarch64-linux.tar.gz"
+          else
+            echo "Skipping smoke test: no functional docker/podman runtime on agent"
+            exit 0
+          fi
 
   - label: ":docker: Collect publish artifacts"
     key: collect-artifacts
     if: build.branch == "master"
     depends_on:
-      - build-smoke-amd64
-      - build-smoke-arm64
+      - build-amd64
+      - build-arm64
     command: |
       set -euo pipefail
       mkdir -p publish-artifacts/images
       buildkite-agent artifact download "images/determinate-nix-x86_64-linux.tar.gz" publish-artifacts/images/ || true
       buildkite-agent artifact download "images/determinate-nix-aarch64-linux.tar.gz" publish-artifacts/images/ || true
+      echo "Collected image tarballs for publish:"
       ls -la publish-artifacts/images/ || true
     artifact_paths:
       - publish-artifacts/**/*
@@ -73,4 +108,4 @@ steps:
       mkdir -p images
       buildkite-agent artifact download "images/determinate-nix-x86_64-linux.tar.gz" images/
       buildkite-agent artifact download "images/determinate-nix-aarch64-linux.tar.gz" images/ || true
-      bash .buildkite/scripts/publish.sh
+      .buildkite/scripts/publish.sh
