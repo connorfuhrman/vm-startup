@@ -1,0 +1,78 @@
+# Buildkite pipeline for Determinate Nix container images.
+#
+# Agent queues (override in pipeline/environment settings if needed):
+#   AMD64_QUEUE — x86_64-linux build/smoke steps (default: "linux-medium")
+#   ARM64_QUEUE — aarch64-linux build/smoke steps (default: "mac-mini-aarch64-linux")
+#
+# Publish (master branch only):
+#   IMAGE_REGISTRY, IMAGE_NAME — required to push images
+#   IMAGE_REGISTRY_USER, IMAGE_REGISTRY_PASSWORD — optional docker login
+
+steps:
+  - label: ":nix: Flake check & nixfmt"
+    key: flake-check
+    command: |
+      set -euo pipefail
+      source .buildkite/scripts/bootstrap-nix.sh
+      nix flake check
+      mapfile -d '' -t nix_files < <(find . -name '*.nix' -not -path './.git/*' -print0)
+      if ((${#nix_files[@]} > 0)); then
+        nix run nixpkgs#nixfmt-rfc-style -- --check "${nix_files[@]}"
+      fi
+
+  - group: ":package: Build & smoke test"
+    depends_on: flake-check
+    steps:
+      - label: ":nix: Build & smoke (x86_64-linux)"
+        key: build-smoke-amd64
+        agents:
+          queue: linux-medium
+        env:
+          NIX_SYSTEM: x86_64-linux
+        command: |
+          set -euo pipefail
+          source .buildkite/scripts/bootstrap-nix.sh
+          .buildkite/scripts/build.sh x86_64-linux
+          .buildkite/scripts/smoke-test.sh x86_64-linux "images/determinate-nix-x86_64-linux.tar.gz"
+        artifact_paths:
+          - images/determinate-nix-x86_64-linux.tar.gz
+
+      - label: ":nix: Build & smoke (aarch64-linux)"
+        key: build-smoke-arm64
+        agents:
+          queue: mac-mini-aarch64-linux
+        env:
+          NIX_SYSTEM: aarch64-linux
+        command: |
+          set -euo pipefail
+          source .buildkite/scripts/bootstrap-nix.sh
+          .buildkite/scripts/build.sh aarch64-linux
+          .buildkite/scripts/smoke-test.sh aarch64-linux "images/determinate-nix-aarch64-linux.tar.gz"
+        artifact_paths:
+          - images/determinate-nix-aarch64-linux.tar.gz
+
+  - label: ":docker: Collect publish artifacts"
+    key: collect-artifacts
+    if: build.branch == "master"
+    depends_on:
+      - build-smoke-amd64
+      - build-smoke-arm64
+    command: |
+      set -euo pipefail
+      mkdir -p publish-artifacts/images
+      buildkite-agent artifact download "images/determinate-nix-x86_64-linux.tar.gz" publish-artifacts/images/ || true
+      buildkite-agent artifact download "images/determinate-nix-aarch64-linux.tar.gz" publish-artifacts/images/ || true
+      ls -la publish-artifacts/images/ || true
+    artifact_paths:
+      - publish-artifacts/**/*
+
+  - label: ":rocket: Publish multi-arch image"
+    key: publish
+    if: build.branch == "master"
+    depends_on: collect-artifacts
+    command: |
+      set -euo pipefail
+      mkdir -p images
+      buildkite-agent artifact download "images/determinate-nix-x86_64-linux.tar.gz" images/
+      buildkite-agent artifact download "images/determinate-nix-aarch64-linux.tar.gz" images/ || true
+      .buildkite/scripts/publish.sh
