@@ -7,6 +7,10 @@
 # Publish (master branch only):
 #   IMAGE_REGISTRY, IMAGE_NAME — required to push images
 #   IMAGE_REGISTRY_USER, IMAGE_REGISTRY_PASSWORD — optional docker login
+#
+# Superseded builds (set on the Buildkite pipeline, not in this YAML):
+#   cancel_running_branch_builds: true  — cancel in-flight jobs when a newer commit is pushed to the same branch
+#   skip_queued_branch_builds: true     — skip queued intermediate builds on that branch
 
 steps:
   - label: ":nix: Flake check"
@@ -55,6 +59,9 @@ steps:
 
       - label: ":nix: Build container (aarch64-linux)"
         key: build-arm64
+        # Opt-in: default CI is x86_64. Set BUILD_ARM64=1 when an ARM agent is available.
+        if: build.env("BUILD_ARM64") == "1"
+        timeout_in_minutes: 60
         agents:
           queue: mac-mini-aarch64-linux
         env:
@@ -70,7 +77,9 @@ steps:
       - label: ":docker: Smoke test (aarch64-linux)"
         key: smoke-arm64
         depends_on: build-arm64
+        if: build.env("BUILD_ARM64") == "1"
         soft_fail: true
+        timeout_in_minutes: 30
         agents:
           queue: mac-mini-aarch64-linux
         command: |
@@ -92,7 +101,6 @@ steps:
     if: build.branch == "master"
     depends_on:
       - build-amd64
-      - build-arm64
     command: |
       set -euo pipefail
       mkdir -p publish-artifacts/images
