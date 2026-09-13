@@ -27,9 +27,10 @@ steps:
           NIX_SYSTEM: x86_64-linux
         command: |
           set -euo pipefail
+          chmod +x .buildkite/scripts/*.sh
           source .buildkite/scripts/bootstrap-nix.sh
-          .buildkite/scripts/build.sh x86_64-linux
-          .buildkite/scripts/smoke-test.sh x86_64-linux "images/determinate-nix-x86_64-linux.tar.gz"
+          bash .buildkite/scripts/build.sh x86_64-linux
+          bash .buildkite/scripts/smoke-test.sh x86_64-linux "images/determinate-nix-x86_64-linux.tar.gz"
         artifact_paths:
           - images/determinate-nix-x86_64-linux.tar.gz
 
@@ -41,9 +42,10 @@ steps:
           NIX_SYSTEM: aarch64-linux
         command: |
           set -euo pipefail
+          chmod +x .buildkite/scripts/*.sh
           source .buildkite/scripts/bootstrap-nix.sh
-          .buildkite/scripts/build.sh aarch64-linux
-          .buildkite/scripts/smoke-test.sh aarch64-linux "images/determinate-nix-aarch64-linux.tar.gz"
+          bash .buildkite/scripts/build.sh aarch64-linux
+          bash .buildkite/scripts/smoke-test.sh aarch64-linux "images/determinate-nix-aarch64-linux.tar.gz"
         artifact_paths:
           - images/determinate-nix-aarch64-linux.tar.gz
 
@@ -71,4 +73,4 @@ steps:
       mkdir -p images
       buildkite-agent artifact download "images/determinate-nix-x86_64-linux.tar.gz" images/
       buildkite-agent artifact download "images/determinate-nix-aarch64-linux.tar.gz" images/ || true
-      .buildkite/scripts/publish.sh
+      bash .buildkite/scripts/publish.sh
